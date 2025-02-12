@@ -58,19 +58,36 @@ export async function verifyAssertion(
     throw new Error('Claimed identity is invalid')
   }
 
-  return new Promise((resolve, reject) => {
-    const relyingParty = new RelyingParty(returnTo, realm, true, false, [])
+  const verifyParams = {
+    ...query,
+    'openid.mode': 'check_authentication'
+  }
 
-    relyingParty.verifyAssertion(request, (error, result) => {
-      if (error) {
-        return reject(error)
-      }
+  const verifyUrl = new URL(STEAM_AUTHORIZATION_URL)
+  const body = new URLSearchParams(verifyParams).toString()
 
-      if (!result || !result.claimedIdentifier || !result.authenticated) {
-        throw new Error('Claimed identity is invalid')
-      }
-
-      resolve(result.claimedIdentifier)
-    })
+  const response = await fetch(verifyUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Content-Length': Buffer.byteLength(body).toString(),
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+      'Referer': 'https://steamcommunity.com/',
+      'Origin': 'https://steamcommunity.com'
+    },
+    body
   })
+
+  if (!response.ok) {
+    throw new Error(`HTTP error ${response.status}`)
+  }
+
+  const responseText = await response.text()
+  const isValid = responseText.split('\n').some(line => line.trim() === 'is_valid:true')
+
+  if (!isValid) {
+    throw new Error('Invalid OpenID response')
+  }
+
+  return query['openid.claimed_id']
 }
